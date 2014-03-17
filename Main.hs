@@ -34,24 +34,20 @@ runDb query = liftIO $ S.runSqlite "db" query
 
 type ActionM = ActionH LT.Text
  
-setSessionExpiring :: R.Connection -> ByteString -> [(ByteString, ByteString)] -> Integer -> IO ()
-setSessionExpiring conn key values timeout = R.runRedis conn $ do
+setSessionExpiring :: R.Connection -> ByteString -> Integer -> [(ByteString, ByteString)] -> IO ()
+setSessionExpiring conn key timeout values = R.runRedis conn $ do
     R.del [key]
     forM_ values (\x -> R.hset key (fst x) (snd x))
     R.expire key timeout
     return ()
 
-setSession conn key values = setSessionExpiring conn key values $ 60*60*2
-
-getSession :: R.Connection -> ByteString -> IO [(ByteString, ByteString)]
+getSession :: R.Connection -> ByteString -> IO (Maybe [(ByteString, ByteString)])
 getSession conn key = R.runRedis conn $ do
     result <- R.hgetall key
     let output = case result of
                      (Right b) -> Just b
                      _ -> Nothing
-    return $ case output of
-               Nothing -> []
-               Just b -> b
+    return output
 
 newKey = do
         let n = 30
@@ -60,32 +56,43 @@ newKey = do
         let numbers = randomRs (0, (length chars - 1)) gen
         return $ BS.pack $ take n $ map (chars!!) numbers
 
-redisBackend :: R.Connection -> Backend
-redisBackend conn key = (getSession conn key, setSession conn key)
+redisBackend :: R.Connection -> Integer -> Backend
+redisBackend conn timeout key = (getSession conn key, setSessionExpiring conn key timeout)
 
-type Backend = ByteString -> (IO [(ByteString, ByteString)], 
+type Backend = ByteString -> (IO (Maybe [(ByteString, ByteString)]), 
     ([(ByteString, ByteString)] -> IO ()))
 
 session :: Backend -> Vault.Key ([(ByteString, ByteString)], 
     ([(ByteString,ByteString)] -> IO ())) -> Middleware
 session backend key app req = do
         let msessid = lookup cookieName =<< cookies
-        sessid <- case msessid of
-                         Nothing -> liftIO $ do
-                             newsessid <- newKey
-                             return newsessid
-                         Just x -> liftIO $ return x
+        sessid <- liftIO $ case msessid of
+                         Nothing -> do
+                            newsessid <- newKey
+                            return newsessid
+                         Just sessid -> do
+                            let (bget, bset) = backend sessid
+                            msess <- bget
+                            newsessid <- case msess of
+                                    Just _ -> return sessid
+                                    Nothing -> do
+                                        newsessid <- newKey
+                                        return newsessid
+                            return newsessid
         let (bget, bset) = backend sessid
-        newReq <- changeRequest bget bset req
+        msess <- bget
+        let sess = case msess of
+                       Just sess -> sess
+                       Nothing -> []
+        let newReq = changeRequest sess bset req
         res <- app newReq
         return $ changeResponse sessid res
     where
         cookieName = "sessionid"
-        changeRequest :: IO [(ByteString,ByteString)] -> 
-            ([(ByteString,ByteString)] -> IO ()) -> Request -> IO (Request)
-        changeRequest bget bset req = do
-            sess <- bget
-            return $ req {vault = Vault.insert key (sess, bset) (vault req)}
+        changeRequest :: [(ByteString,ByteString)] -> 
+            ([(ByteString,ByteString)] -> IO ()) -> Request -> Request
+        changeRequest sess bset req = 
+                req {vault = Vault.insert key (sess, bset) (vault req)}
         setCookie = fromString "Set-Cookie"
         ciCookie = fromString "Cookie"
         changeResponse :: ByteString -> Response -> Response
@@ -94,9 +101,10 @@ session backend key app req = do
         cookies = fmap parseCookies $ lookup ciCookie (requestHeaders req)
 
 newCookie cookieName cookieVal = B.toByteString $ 
-    renderSetCookie $ def {
-            setCookieName = cookieName, setCookieValue = cookieVal
-    }
+        renderSetCookie $ def 
+                            { setCookieName = cookieName 
+                            , setCookieValue = cookieVal
+                            }
 mapHeader :: (ResponseHeaders -> ResponseHeaders) -> Response -> Response
 mapHeader f (ResponseFile s h b1 b2) = ResponseFile s (f h) b1 b2
 mapHeader f (ResponseBuilder s h b) = ResponseBuilder s (f h) b
@@ -107,7 +115,7 @@ main = scottyH' 3000 $ do
     runDb $ S.runMigration migrateAll
     conn <- liftIO $ R.connect R.defaultConnectInfo
     vaultKey <- liftIO $ Vault.newKey
-    middleware $ session (redisBackend conn) vaultKey
+    middleware $ session (redisBackend conn $ 60*60*2) vaultKey
     setTemplatesDir "templates"
     middleware logStdoutDev
     get "/unauthed" $ html "Unauthed"
