@@ -34,7 +34,8 @@ main = scottyH' 3000 $ do
     middleware $ session (redisBackend conn $ 60*60*2) vaultKey
     let getSess = getSession vaultKey
     let setSess = setSession vaultKey
-    let sessInsert sess key val = (key, val) : (filter ((==) key . fst) sess)
+    let sessRemove sess key = (filter ((/=) key . fst) sess)
+    let sessInsert sess key val = (key, val) : sessRemove sess key
     let isAuthed = lookup "username"
     setTemplatesDir "templates"
     middleware logStdoutDev
@@ -84,6 +85,10 @@ main = scottyH' 3000 $ do
                                 BS.pack username
                         html $ LT.pack $ show passwordsMatch
                     Nothing -> html "No such user"
+    get "/logout" $ do
+        req <- request
+        liftIO $ setSess req $ sessRemove (getSess req) "username"
+        redirect "/login"
     get "/get" $ do
         req <- request
         html $ LT.pack $ show $ getSess req
