@@ -33,10 +33,6 @@ executable scottyaccounts
                         , random
                         , wai
                         , vault
-                        , cookie
                         , text
-                        , blaze-builder
-                        , wai-session
                         , string
-                        , default
-                        , http-types
+                        , scotty-sessions
