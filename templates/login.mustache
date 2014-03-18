@@ -1,17 +1,11 @@
 {{> header}}
-<div class="col-sm-7 col-sm offset-2">
-    <legend>Login</legend>
-    <form action="/login" method="post">
+<div class="col-sm-4 col-sm-offset-4">
+    <h1>Login</h1>
+    <form action="/login" method="post" class="form-login">
+            <input type="text" class="form-control username" value="" name="username" placeholder="Username">
+            <input type="password" class="form-control password" value="" name="password" placeholder="Password">
         <div class="form-group">
-            <label class="control-label">Username</label>
-            <input type="text" class="form-control" value="" name="username">
-        </div>
-        <div class="form-group">
-            <label class="control-label">Password</label>
-            <input type="password" class="form-control" value="" name="password">
-        </div>
-        <div class="form-group">
-            <button class="btn btn-primary" type="submit">
+            <button class="btn btn-primary btn-lg btn-block" type="submit">
                 <span class="glyphicon glyphicon-lock"></span>
                 Login
             </button>
