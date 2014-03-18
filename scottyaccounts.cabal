@@ -31,7 +31,6 @@ executable scottyaccounts
                         , bytestring
                         , hedis
                         , random
-                        , wai
                         , vault
                         , text
                         , string

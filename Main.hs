@@ -17,7 +17,6 @@ import Data.Maybe (fromJust)
 import Control.Monad
 import qualified Database.Redis as R
 import System.Random
-import Network.Wai (vault)
 import qualified Data.Vault.Lazy as Vault
 import Data.String
 import Web.Scotty.Sessions
@@ -33,8 +32,10 @@ main = scottyH' 3000 $ do
     conn <- liftIO $ R.connect R.defaultConnectInfo
     vaultKey <- liftIO $ Vault.newKey
     middleware $ session (redisBackend conn $ 60*60*2) vaultKey
-    let getSession = (\x -> fst $ fromJust $ Vault.lookup vaultKey (vault x))
-    let setSession = (\x -> snd $ fromJust $ Vault.lookup vaultKey (vault x))
+    let getSess = getSession vaultKey
+    let setSess = setSession vaultKey
+    let sessInsert sess key val = (key, val) : (filter ((==) key . fst) sess)
+    let isAuthed = lookup "username"
     setTemplatesDir "templates"
     middleware logStdoutDev
     get "/unauthed" $ html "Unauthed"
@@ -72,18 +73,17 @@ main = scottyH' 3000 $ do
         let mPasswordsMatch = do
             ent <- ment
             let user = S.entityVal ent
-            let username = userUsername user
             let hash = userPassword user
             let passwordsMatch = BC.validatePassword (BS.pack hash) password
             return passwordsMatch
         case mPasswordsMatch of 
                     Just passwordsMatch -> do
+                        req <- request
+                        liftIO $ setSess req $ 
+                            sessInsert (getSess req) "username" $ 
+                                BS.pack username
                         html $ LT.pack $ show passwordsMatch
                     Nothing -> html "No such user"
-    get "/getsession" $ do
+    get "/get" $ do
         req <- request
-        html $ LT.pack $ show $ getSession req
-    get "/setsession" $ do
-        req <- request
-        liftIO $ setSession req [("test","test")]
-        html $ "set session"
+        html $ LT.pack $ show $ getSess req
