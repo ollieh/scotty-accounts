@@ -35,3 +35,4 @@ executable scottyaccounts
                         , text
                         , string
                         , scotty-sessions
+                        , wai-middleware-static

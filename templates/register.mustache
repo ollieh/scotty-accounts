@@ -1,12 +1,21 @@
-<!DOCTYPE html>
-<html>
-  <head></head>
-<body>
-<h1>Register!</h1>
-  <form action="/register" method="post">
-    <input type="text" name="username" value="">
-    <input type="password" name="password" value="">
-    <input type="submit" class="submit" value="Register" name="">
-  </form>
-</body>
-</html>
+{{> header}}
+<div class="col-sm-7 col-sm offset-2">
+    <legend>Register</legend>
+    <form action="/register" method="post">
+        <div class="form-group">
+            <label class="control-label">Username</label>
+            <input type="text" class="form-control" value="" name="username">
+        </div>
+        <div class="form-group">
+            <label class="control-label">Password</label>
+            <input type="password" class="form-control" value="" name="password">
+        </div>
+        <div class="form-group">
+            <button class="btn btn-success" type="submit">
+                <i class="fa fa-check"></i>
+                Register
+            </button>
+        </div>
+    </form>
+</div>
+{{> footer}}
